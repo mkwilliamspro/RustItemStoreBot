@@ -1,9 +1,8 @@
-'''
+"""
     Rust Item Store Discord Bot
         Intended to integrate with a windows script to run every 30 minutes on thursday after 2:00 EST until an update
         is found. To be modified to be interactable using Discord's interaction interface, otherwise simply a weekly
         posting bot with no human interaction.
-        Keys.pkl should be an existing file, which holds the discord bot's key.
     Matthew Williams
     12/15/22
 
@@ -11,13 +10,19 @@
         - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
         - Formatting of message, image scaling, include a link to purchase
         - Allow queries on each specific item
-
-'''
+        - Scrape page quantity and for loop through that amount of pages
+"""
 
 import discord
 import requests
 from bs4 import BeautifulSoup
-import Keys
+try:
+    import Keys
+except ModuleNotFoundError:
+    with open("Keys.py","x") as f:
+        f.write("disc_key = \"INSERT DISCORD KEY HERE\"")
+    import Keys
+
 import ItemDict as IDict
 
 disc_client = discord.Client()
@@ -25,7 +30,8 @@ URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p1'
 URL2 = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p2'
 BASE_URL = "https://store.steampowered.com/itemstore/252490/detail/"
 
-
+# called when the connection is completed and bot is compiled and loaded.
+# runs probeItemStore, sends them as a message if found
 @disc_client.event
 async def on_ready():
     store_new = probeItemStore()
