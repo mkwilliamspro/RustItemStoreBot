@@ -11,7 +11,7 @@
         - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
         - Formatting of message, image scaling, include a link to purchase
         - Allow queries on each specific item
-
+        - Test if pickle is necessary; may just be able to store in a python file, then import the file
 
 '''
 
