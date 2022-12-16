@@ -3,7 +3,7 @@
         Intended to integrate with a windows script to run every 30 minutes on thursday after 2:00 EST until an update
         is found. To be modified to be interactable using Discord's interaction interface, otherwise simply a weekly
         posting bot with no human interaction.
-
+        Keys.pkl should be an existing file, which holds the discord bot's key.
     Matthew Williams
     12/15/22
 
@@ -11,18 +11,16 @@
         - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
         - Formatting of message, image scaling, include a link to purchase
         - Allow queries on each specific item
-        - Test if pickle is necessary; may just be able to store in a python file, then import the file
 
 '''
 
 import discord
-import dill as pickle
 import requests
 from bs4 import BeautifulSoup
 import Keys
+import ItemDict as IDict
 
 disc_client = discord.Client()
-PICKLE_FILE_STRING = "itemDict.pkl"
 URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p1'
 URL2 = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p2'
 BASE_URL = "https://store.steampowered.com/itemstore/252490/detail/"
@@ -35,9 +33,8 @@ async def on_ready():
     if len(store_new) > 0:
         print("New Things!")
         for item in store_new:
-            await general_channel.send(item + " " +  store_new[item][1])
+            await general_channel.send(item + " " + store_new[item][1])
     print("All done setting up!")
-
 
 
 # triggers any time a message is seen by the bot
@@ -62,18 +59,6 @@ async def on_message(message):
 # Scrapes the pages, returns False if nothing is new, or a dictionary of the new values otherwise
 def probeItemStore():
 
-    # opens pickle file holding dictionary of store items, creates file if it doesn't exist
-    try:
-        with open(PICKLE_FILE_STRING, "rb") as f:
-            idDict = pickle.load(f)
-    except EOFError:
-        idDict = {}
-        print("File was empty upon loading")
-    except FileNotFoundError:
-        print("File not found! Creating File instead")
-        open(PICKLE_FILE_STRING, "x")
-        idDict = {}
-
     # Scrape from both pages of Items
     # If more pages than 2 become a problem, implement for-loop that increments the URL string's page #
     page = requests.get(URL)
@@ -93,40 +78,25 @@ def probeItemStore():
         rText = result.text
         # Check if new item in database based on text-based dictionary key, adds unrecognized keys along with href
         # and image
-        if rText not in idDict:
+        if rText not in IDict.idDict:
             rHref = result.attrs['href']
             page = requests.get(rHref)
             soup = BeautifulSoup(page.content, "html.parser")
             image = soup.find(id="preview_image").attrs["src"]
             rHref = rHref.split("/")[6]
-            idDict[rText] = [rHref, image]
+            IDict.idDict[rText] = [rHref, image]
             newItems[rText] = [rHref, image]
 
-    try:
-        with open(PICKLE_FILE_STRING, "wb") as f:
-            pickle.dump(idDict, f)
-    except:
-        print("File write error")
-
+    saveItemDict()
     return newItems
+
 
 # fills the backlog FROM the most recently released skins all the way to the first ever released
 # Common skins/packages follow 5xxx
 # Rare skins/packages follow 1xxx
 def fillBackLog(idCommon, idRare):
 
-    try:
-        with open(PICKLE_FILE_STRING, "rb") as f:
-            idDict = pickle.load(f)
-    except EOFError:
-        idDict = {}
-        print("File was empty upon loading")
-    except FileNotFoundError:
-        print("File not found! Creating File instead")
-        open(PICKLE_FILE_STRING, "x")
-        idDict = {}
     count = 0
-
     # Loops from most recent item all the way down until a site error (404)
     while True:
         page = requests.get(BASE_URL + idCommon)
@@ -135,7 +105,7 @@ def fillBackLog(idCommon, idRare):
             break
         noodles = soup.find("h2", "pageheader itemtitle").text
         image = soup.find(id="preview_image").attrs["src"]
-        idDict[idCommon] = [noodles, image]
+        IDict.idDict[idCommon] = [noodles, image]
         idCommon = idCommon - 1
         count += 1
 
@@ -146,16 +116,19 @@ def fillBackLog(idCommon, idRare):
             break
         noodles = soup.find("h2", "pageheader itemtitle").text
         image = soup.find(id="preview_image").attrs["src"]
-        idDict[idRare] = [noodles, image]
+        IDict.idDict[idRare] = [noodles, image]
         idRare = idRare - 1
         count += 1
 
+    saveItemDict()
+
+# Saves dictionary updates to the appropriate python file
+def saveItemDict():
     try:
-        with open(PICKLE_FILE_STRING, "wb") as f:
-            pickle.dump(idDict, f)
-            return str(count) + " Records modified successfully"
-    except:
-        print("File write error")
+        with open("ItemDict.py", "w+") as f:
+            f.write("idDict = " + str(IDict.idDict))
+    except FileExistsError:
+        print("You should never see this but file already exists?")
 
 
 disc_client.run(Keys.disc_key)
