@@ -3,6 +3,10 @@
         Intended to integrate with a windows script to run every 30 minutes on thursday after 2:00 EST until an update
         is found. To be modified to be interactable using Discord's interaction interface, otherwise simply a weekly
         posting bot with no human interaction.
+
+        Pivoting off to a related project; the item store loads the objects through javascript which interfaces with
+        the backend, meaning that I only have access to the items CURRENTLY in the store, even when attempting to reach
+        the item's unique store URL. To curb, this I will interface with the Steam WEB API.
     Matthew Williams
     12/15/22
 
@@ -10,9 +14,10 @@
         - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
         - Formatting of message, image scaling, include a link to purchase
         - Allow queries on each specific item
-        - Scrape page quantity and for loop through that amount of pages
+        - Scrape page quantity and for loop through that amount of pages !!
+        - Issue where loading pages, the store uses javascript to changes to the following pages.
 """
-
+import bs4
 import discord
 import requests
 from bs4 import BeautifulSoup
@@ -26,8 +31,6 @@ except ModuleNotFoundError:
 import ItemDict as IDict
 
 disc_client = discord.Client()
-URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p1'
-URL2 = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p2'
 BASE_URL = "https://store.steampowered.com/itemstore/252490/detail/"
 
 # called when the connection is completed and bot is compiled and loaded.
@@ -64,16 +67,12 @@ async def on_message(message):
 
 # Scrapes the pages, returns False if nothing is new, or a dictionary of the new values otherwise
 def probeItemStore():
-
+    URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All'
     # Scrape from both pages of Items
     # If more pages than 2 become a problem, implement for-loop that increments the URL string's page #
     page = requests.get(URL)
     soup = BeautifulSoup(page.content, "html.parser")
     noodles = soup.findAll("div", "item_def_name ellipsis")
-    page = requests.get(URL2)
-    soup = BeautifulSoup(page.content, "html.parser")
-    noodles2 = soup.findAll("div", "item_def_name ellipsis")
-    noodles = noodles + noodles2
 
     # Keeping track of new items to be returned later
     newItems = {}
