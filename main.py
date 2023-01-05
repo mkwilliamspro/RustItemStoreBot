@@ -1,23 +1,20 @@
 """
-    Rust Item Store Discord Bot
-        Intended to integrate with a windows script to run every 30 minutes on thursday after 2:00 EST until an update
-        is found. To be modified to be interactable using Discord's interaction interface, otherwise simply a weekly
-        posting bot with no human interaction.
+    Rust Item Store Discord Bot and Page Scraper
+        Intended to integrate with a AWS Lambda script to run every 30 minutes on thursday after 2:00 EST until an update
+        is found.
 
-        Pivoting off to a related project; the item store loads the objects through javascript which interfaces with
-        the backend, meaning that I only have access to the items CURRENTLY in the store, even when attempting to reach
-        the item's unique store URL. To curb, this I will interface with the Steam WEB API.
-    Matthew Williams
-    12/15/22
+        The item store loads the page and scrapes the items that load through javascript, checks the unique ID's
+        against a database, adds them if new, then posts them to the discord if new Matthew Williams 12/15/22
 
     TODO:
         - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
         - Formatting of message, image scaling, include a link to purchase
-        - Allow queries on each specific item
-        - Scrape page quantity and for loop through that amount of pages !!
-        - Issue where loading pages, the store uses javascript to changes to the following pages.
+        - Only start discord bot when needed
+        - Fill Backlog
+        - Interface with database
+        - Port to AWS Lambda
 """
-import bs4
+from requests_html import HTMLSession
 import discord
 import requests
 from bs4 import BeautifulSoup
@@ -32,7 +29,7 @@ import ItemDict as IDict
 
 disc_client = discord.Client()
 BASE_URL = "https://store.steampowered.com/itemstore/252490/detail/"
-
+URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All'
 # called when the connection is completed and bot is compiled and loaded.
 # runs probeItemStore, sends them as a message if found
 @disc_client.event
@@ -65,40 +62,44 @@ async def on_message(message):
             await message.channel.send("Missing Values... expected format: %$Backlog it$% __IDCOMMON__ __IDRARE__")
 
 
-# Scrapes the pages, returns False if nothing is new, or a dictionary of the new values otherwise
+# Scrapes the pages and returns a dictionary of the new values otherwise
 def probeItemStore():
-    URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All'
     # Scrape from both pages of Items
-    # If more pages than 2 become a problem, implement for-loop that increments the URL string's page #
-    page = requests.get(URL)
-    soup = BeautifulSoup(page.content, "html.parser")
-    noodles = soup.findAll("div", "item_def_name ellipsis")
-
-    # Keeping track of new items to be returned later
+    # Keeps track of item count to get each page
+    session = HTMLSession()
+    curr = -1
+    end = -2
+    count = 1
+    noodles = []
+    while curr != end:
+        resp = session.get(URL + str(count))
+        resp.html.render()
+        page = resp.html.html
+        soup = BeautifulSoup(page, "html.parser")
+        noodles = noodles + soup.findAll("div", "item_def_name ellipsis")
+        curr = soup.find(id="ItemDefs_total").text
+        end = soup.find(id="ItemDefs_end").text
+        session.close()
+        session = HTMLSession()
+        count += 1
     newItems = {}
 
-    # Loops through each item's div
-    for result in noodles:
-        result = result.findNext("a")
-        rText = result.text
-        # Check if new item in database based on text-based dictionary key, adds unrecognized keys along with href
-        # and image
-        if rText not in IDict.idDict:
-            rHref = result.attrs['href']
-            page = requests.get(rHref)
-            soup = BeautifulSoup(page.content, "html.parser")
-            image = soup.find(id="preview_image").attrs["src"]
-            rHref = rHref.split("/")[6]
-            IDict.idDict[rText] = [rHref, image]
-            newItems[rText] = [rHref, image]
+    # Loops through each item's div, stripping and populating a dictionary
+    for x in noodles:
+        itemId = x.text
+        page = requests.get(BASE_URL + itemId + "/")
+        soup = BeautifulSoup(page.content, "html.parser")
+        image = soup.find(id="preview_image").attrs["src"]
+        newItems[str(x.find("a").get("href").split("l/")[1].strip('/'))] = [itemId, image]
 
-    saveItemDict()
     return newItems
 
 
 # fills the backlog FROM the most recently released skins all the way to the first ever released
 # Common skins/packages follow 5xxx
 # Rare skins/packages follow 1xxx
+
+# TODO: CONVERT TO SCRAPING STEAMDB, BROKEN OTHERWISE
 def fillBackLog(idCommon, idRare):
 
     count = 0
@@ -126,6 +127,7 @@ def fillBackLog(idCommon, idRare):
         count += 1
 
     saveItemDict()
+
 
 # Saves dictionary updates to the appropriate python file
 def saveItemDict():
