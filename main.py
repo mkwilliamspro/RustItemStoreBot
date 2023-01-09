@@ -7,27 +7,39 @@
         against a database, adds them if new, then posts them to the discord if new Matthew Williams 12/15/22
 
     TODO:
-        - Download images & Have them uploaded by the bot instead of using weblinks right now OR have the images embedded
+        - DOWNLOAD IMAGES TO TEMP FOLDER THEN UPLOAD THEM TO THE DATABASE, THEN SEND IN DISCORD MESSAGE
         - Formatting of message, image scaling, include a link to purchase
-        - Only start discord bot when needed
         - Fill Backlog
-        - Move all RDS calls to one simpler function
         - Port to AWS Lambda
+            - Setup server that's not test server
+            - Setup code that's not test code
+            - Connect the two
+            - Upload dependencies individually
+            - Get cron() expression set up
+            - cron() until specific goal is met
+        - Implement Logger to move away from prints
+        - Add Timeouts
+
 """
+import discordBot
+import webScraper
 
-import discord
-
-# Working on moving these files into a SQL Database
 try:
-    import Keys
-except ModuleNotFoundError:
-    with open("Keys.py","x") as f:
-        f.write("disc_key = \"INSERT DISCORD KEY HERE\"")
-    import Keys
+    scrapeResults = webScraper.getItems()
+    print("Items have been got")
+except Exception as e:
+    print("Exception while gettingItems page:" + str(e))
+    exit()
 
+try:
+    scrapeResults = webScraper.trimAndCommit(scrapeResults)
+    print("Items have been commit")
+except Exception as e:
+    print("Exception while trimmingAndCommitting page:" + str(e))
+    exit()
 
-
-
-
-
-
+if len(scrapeResults) == 0:
+    print("No Updates Found")
+    exit()
+else:
+    discordBot.launch(scrapeResults)

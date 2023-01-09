@@ -5,11 +5,11 @@ from bs4 import BeautifulSoup
 import Keys
 
 BASE_URL = "https://store.steampowered.com/itemstore/252490/detail/"
-URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All'
+URL = 'https://store.steampowered.com/itemstore/252490/browse/?filter=All#p'
 
 
 # Scrapes the pages and returns a dictionary of the new values otherwise
-# Example: [__ItemID__: (__ItemName__,__ImageURL), __ItemID2__: (__ItemName2__,__ImageURL2), ...]
+# Example: [__ItemID__: (__ItemName__,__ImageURL__), __ItemID2__: (__ItemName2__,__ImageURL2), ...]
 def getItems():
     # Scrape from both pages of Items
     # Keeps track of item count to get each page
@@ -29,15 +29,18 @@ def getItems():
         session.close()
         session = HTMLSession()
         count += 1
+    print("Items have been scanned in")
     newItems = {}
 
     # Loops through each item's div, stripping and populating a dictionary
     for x in noodles:
+        itemID = str(x.find("a").get("href").split("l/")[1].strip('/'))
         itemName = x.text
-        page = requests.get(BASE_URL + itemName + "/")
+        page = requests.get(BASE_URL + itemID + "/")
         soup = BeautifulSoup(page.content, "html.parser")
-        image = soup.find(id="preview_image").attrs["src"]
-        newItems[str(x.find("a").get("href").split("l/")[1].strip('/'))] = [itemName, image]
+        image = soup.find(id="preview_image")
+        image = image.attrs["src"]
+        newItems[itemID] = [itemName, image]
 
     return newItems
 
@@ -60,39 +63,38 @@ def trimAndCommit(newDict):
         with conn.cursor() as cur:
 
             # create temp table
-            sql = "DROP TABLE IF EXISTS TEMP; CREATE TABLE TEMP (ItemID int NOT NULL PRIMARY KEY,ItemName varchar(" \
-                  "255) NOT NULL,ImageURL varchar(255)); "
+            sql = "DROP TABLE IF EXISTS TEMP;"
             cur.execute(sql)
-
+            sql = "CREATE TABLE TEMP (ItemID int NOT NULL PRIMARY KEY,ItemName varchar(255) NOT NULL,ImageURL " \
+                  "varchar(255)); "
+            cur.execute(sql)
+            print("TEMP TABLE CREATED")
             # populate TEMP table
             for x in newDict:
                 tempList = [x] + newDict[x]
                 sql = "INSERT INTO TEMP (ItemID, ItemName, ImageURL) VALUES ({0}, \'{1}\', \'{2}\')".format(*tempList)
                 cur.execute(sql)
-
+            print("TEMP TABLE POPULATED")
             # Get new values for discord output
             sql = "SELECT * FROM TEMP WHERE TEMP.ItemID NOT IN (SELECT ItemID FROM ITEMS);"
             cur.execute(sql)
             newItems = list(cur)
-
+            print("TABLES FILTERED")
             # Insert new values (TEMP TABLE) into database
             sql = "INSERT INTO ITEMS SELECT * FROM TEMP WHERE TEMP.ItemID NOT IN (SELECT ItemID FROM ITEMS);"
             cur.execute(sql)
-
+            print("TABLES MERGED")
             # Drop/Remove the temp table
-            sql = "DROP TABLE IF EXISTS TEMP"
+            sql = "DROP TABLE IF EXISTS TEMP;"
             cur.execute(sql)
-
+            print("TEMP DELETED")
         conn.commit()
 
         # converts list to dictionary
         count = 0
         tDict = {}
         for x in newItems:
-            if count % 3 == 0:
-                keyIndex = newItems.index(x)
-                tDict[x] = [newItems[keyIndex+1], newItems[keyIndex+2]]
-            count += 1
+            tDict[int(x[0])] = [x[1], x[2]]
         return tDict
 
     except pymysql.MySQLError as e:
